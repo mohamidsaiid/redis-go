@@ -18,16 +18,25 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("waiting for connection")
-	conn, err := l.Accept()
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
-	}
 
 	for {
-		fmt.Println("new connection recieved")
+		conn, err := l.Accept()
+		if err != nil {
+			fmt.Println("Error accepting connection: ", err.Error())
+			os.Exit(1)
+		}
+		go handleConn(conn)
+	}
+
+}
+
+func handleConn(conn net.Conn) {
+	defer conn.Close()
+
+	for {
 		buffer := make([]byte, 128)
-		_, err = conn.Read(buffer)
+
+		_, err := conn.Read(buffer)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -36,6 +45,5 @@ func main() {
 			fmt.Println(err)
 			break
 		}
-		fmt.Println("pong sent")
 	}
 }
