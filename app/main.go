@@ -26,7 +26,6 @@ func main() {
 		}
 		buffer := make([]byte, 1024)
 		conn.Read(buffer)
-		fmt.Println(string(buffer))
 		conn.Write([]byte("+PONG\r\n"))
 	}
 }
