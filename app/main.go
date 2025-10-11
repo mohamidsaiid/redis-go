@@ -7,15 +7,17 @@ import (
 	"os"
 )
 
-var (
-	echo    = "echo"
-	ping    = "ping"
-	command = "command"
-	docs    = "docs"
-	sep     = []byte("\r\n")
+const (
+	echo = "echo"
+	ping = "ping"
+	get  = "get"
+	set  = "set"
+	sep  = "\r\n"
 )
 
 type commands []string
+
+var data = map[string]string{}
 
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -53,19 +55,43 @@ func handleConn(conn net.Conn) {
 			conn.Write([]byte(err.Error()))
 			break
 		}
-
-		buf := bytes.Split(buffer, []byte("\r\n"))
+		fmt.Println(string(buffer))
+		buf := bytes.Split(buffer, []byte(sep))
+		buf = buf[:len(buf)-1]
 		if buf[0][0] == '*' {
 			// this should be an array
 			cmds := parse(buf)
 			switch cmds[0] {
 			case ping:
-				conn.Write([]byte("+PONG\r\n"))
+				if len(cmds) == 1 {
+					conn.Write([]byte("+PONG\r\n"))
+				} else {
+					conn.Write([]byte("+ERROR\r\n"))
+				}
 			case echo:
-				if len(cmds) > 1 {
+				if len(cmds) > 1 && len(cmds) < 3 {
 					arg := cmds[1]
 					response := fmt.Sprintf("$%d\r\n%s\r\n", len(arg), arg)
 					conn.Write([]byte(response))
+				} else {
+					conn.Write([]byte("+ERROR\r\n"))
+				}
+			case set:
+				if len(cmds) == 3 {
+					data[cmds[1]] = cmds[2]
+					conn.Write([]byte("+OK\r\n"))
+				} else {
+					conn.Write([]byte("+ERROR\r\n"))
+				}
+			case get:
+				if len(cmds) == 2 {
+					if val, ok := data[cmds[1]]; ok {
+						response := fmt.Sprintf("+%s\r\n", val)
+						conn.Write([]byte(response))
+					} else {
+						response := "+(nil)\r\n"
+						conn.Write([]byte(response))
+					}
 				}
 			default:
 				conn.Write([]byte("+ERROR\r\n"))
