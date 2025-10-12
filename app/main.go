@@ -192,7 +192,11 @@ func handleLRange(cmds parameters, data *sync.Map, conn net.Conn) {
 		conn.Write([]byte("+ERROR\r\n"))
 		return
 	}
-	list, _ := data.Load(key)
+	list, ok := data.Load(key)
+	if !ok {
+		conn.Write([]byte("*0\r\n"))
+		return
+	}
 	arr := arrayBuilder(list.([]string), startIdx, endIdx)
 	conn.Write(arr)
 }
