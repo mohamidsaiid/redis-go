@@ -98,7 +98,7 @@ func parse(buf [][]byte) parameters {
 	cmds := make(parameters, 0, 10)
 	for _, val := range buf {
 		val = bytes.ToLower(val)
-		if (val[0] >= 'a' && val[0] <= 'z') || (val[0] >= '0' && val[0] <= '9') {
+		if val[0] != '$' && val[0] != ':' && val[0] != '*' {
 			cmds = append(cmds, string(val))
 		}
 	}
@@ -182,14 +182,14 @@ func handleRPush(cmds parameters, data *sync.Map, conn net.Conn) {
 
 func handleLRange(cmds parameters, data *sync.Map, conn net.Conn) {
 	if len(cmds) < 4 {
-		conn.Write([]byte("+ERROR\r\n"))
+		conn.Write([]byte("+SERROR\r\n"))
 		return
 	}
 	key, start, end := cmds[1], cmds[2], cmds[3]
 	startIdx, err := strconv.Atoi(start)
 	endIdx, err := strconv.Atoi(end)
 	if err != nil {
-		conn.Write([]byte("+ERROR\r\n"))
+		conn.Write([]byte("+NERROR\r\n"))
 		return
 	}
 	list, ok := data.Load(key)
@@ -197,11 +197,11 @@ func handleLRange(cmds parameters, data *sync.Map, conn net.Conn) {
 		conn.Write([]byte("*0\r\n"))
 		return
 	}
-	arr := arrayBuilder(list.([]string), startIdx, endIdx)
+	arr := LRangeBuilder(list.([]string), startIdx, endIdx)
 	conn.Write(arr)
 }
 
-func arrayBuilder(list []string, start, end int) []byte {
+func LRangeBuilder(list []string, start, end int) []byte {
 
 	str := strings.Builder{}
 
@@ -209,8 +209,14 @@ func arrayBuilder(list []string, start, end int) []byte {
 		str.WriteString("*0\r\n")
 		return []byte(str.String())
 	}
-	if end > len(list) {
+	if end >= len(list) {
 		end = len(list) - 1
+	}
+	if start < 0 {
+		start += len(list)
+	}
+	if end < 0 {
+		end += len(list)
 	}
 	str.WriteString(fmt.Sprintf("*%d\r\n", end-start+1))
 
