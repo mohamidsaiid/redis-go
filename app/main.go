@@ -213,11 +213,18 @@ func LRangeBuilder(list []string, start, end int) []byte {
 		end = len(list) - 1
 	}
 	if start < 0 {
-		start += len(list)
+		start %= len(list)
+		if start < 0 {
+			start += len(list)
+		}
 	}
 	if end < 0 {
-		end += len(list)
+		end %= len(list)
+		if end < 0 {
+			end += len(list)
+		}
 	}
+	fmt.Println(start, end)
 	str.WriteString(fmt.Sprintf("*%d\r\n", end-start+1))
 
 	for i := start; i <= end; i++ {
