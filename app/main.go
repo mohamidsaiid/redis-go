@@ -183,6 +183,10 @@ func handleRPush(cmds parameters, data *sync.Map, conn net.Conn) {
 }
 
 func handleLRange(cmds parameters, data *sync.Map, conn net.Conn) {
+	if len(cmds) < 4 {
+		conn.Write([]byte("+ERROR\r\n"))
+		return
+	}
 	key, start, end := cmds[1], cmds[2], cmds[3]
 	startIdx, err := strconv.Atoi(start)
 	endIdx, err := strconv.Atoi(end)
