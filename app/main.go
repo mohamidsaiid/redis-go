@@ -10,11 +10,13 @@ import (
 )
 
 const (
-	echo = "echo"
-	ping = "ping"
-	get  = "get"
-	set  = "set"
-	sep  = "\r\n"
+	echo  = "echo"
+	ping  = "ping"
+	get   = "get"
+	set   = "set"
+	rpush = "rpush"
+	rpop  = "rpop"
+	sep   = "\r\n"
 )
 
 type commands []string
@@ -72,6 +74,8 @@ func handleConn(conn net.Conn) {
 					handleSet(cmds, data, conn)
 				case get:
 					handleGet(cmds, data, conn)
+				case rpush:
+					handleRPush(cmds, data, conn)
 				default:
 					conn.Write([]byte("+ERROR\r\n"))
 					continue
@@ -158,3 +162,19 @@ func handleGet(cmds commands, data *sync.Map, conn net.Conn) {
 		}
 	}
 }
+
+func handleRPush(cmds commands, data *sync.Map, conn net.Conn) {
+	key := cmds[1]
+	list, ok := data.Load(key)
+	if !ok {
+		list = make([]string, 0, 10)
+	}
+	for i := 2; i < len(cmds); i++ {
+		list = append(list.([]string), cmds[i])
+	}
+	data.Store(key, list)
+	res := fmt.Sprint(":", len(list.([]string)), "\r\n")
+	conn.Write([]byte(res))
+}
+
+
