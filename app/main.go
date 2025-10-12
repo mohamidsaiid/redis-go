@@ -61,7 +61,6 @@ func handleConn(conn net.Conn) {
 			conn.Write([]byte(err.Error()))
 			break
 		}
-		fmt.Println(string(buffer))
 		buf := bytes.Split(buffer, []byte(sep))
 		buf = buf[:len(buf)-1]
 		if buf[0][0] == '*' {
@@ -125,7 +124,6 @@ func handleEcho(cmds parameters, conn net.Conn) {
 }
 
 func handleSet(cmds parameters, data *sync.Map, conn net.Conn) {
-	fmt.Println(len(cmds))
 	if len(cmds) == 3 {
 		key, value := cmds[1], cmds[2]
 		data.Store(key, value)
@@ -210,7 +208,7 @@ func arrayBuilder(list []string, start, end int) []byte {
 	if end > len(list) {
 		end = len(list) - 1
 	}
-	str.WriteString(fmt.Sprintf("*%d\r\n", end-start))
+	str.WriteString(fmt.Sprintf("*%d\r\n", end-start+1))
 
 	for i := start; i <= end; i++ {
 		s := fmt.Sprintf("$%d\r\n%s\r\n", len(list[i]), list[i])
