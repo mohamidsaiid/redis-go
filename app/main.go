@@ -5,21 +5,24 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
 const (
-	echo  = "echo"
-	ping  = "ping"
-	get   = "get"
-	set   = "set"
-	rpush = "rpush"
-	rpop  = "rpop"
-	sep   = "\r\n"
+	echo   = "echo"
+	ping   = "ping"
+	get    = "get"
+	set    = "set"
+	rpush  = "rpush"
+	rpop   = "rpop"
+	lrange = "lrange"
+	sep    = "\r\n"
 )
 
-type commands []string
+type parameters []string
 
 func main() {
 	// You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -76,6 +79,8 @@ func handleConn(conn net.Conn) {
 					handleGet(cmds, data, conn)
 				case rpush:
 					handleRPush(cmds, data, conn)
+				case lrange:
+					handleLRange(cmds, data, conn)
 				default:
 					conn.Write([]byte("+ERROR\r\n"))
 					continue
@@ -90,8 +95,8 @@ func handleConn(conn net.Conn) {
 	}
 }
 
-func parse(buf [][]byte) commands {
-	cmds := make(commands, 0, 10)
+func parse(buf [][]byte) parameters {
+	cmds := make(parameters, 0, 10)
 	for _, val := range buf {
 		val = bytes.ToLower(val)
 		if (val[0] >= 'a' && val[0] <= 'z') || (val[0] >= '0' && val[0] <= '9') {
@@ -101,7 +106,7 @@ func parse(buf [][]byte) commands {
 	return cmds
 }
 
-func handlePing(cmds commands, conn net.Conn) {
+func handlePing(cmds parameters, conn net.Conn) {
 	if len(cmds) == 1 {
 		conn.Write([]byte("+PONG\r\n"))
 	} else {
@@ -109,7 +114,7 @@ func handlePing(cmds commands, conn net.Conn) {
 	}
 }
 
-func handleEcho(cmds commands, conn net.Conn) {
+func handleEcho(cmds parameters, conn net.Conn) {
 	if len(cmds) > 1 && len(cmds) < 3 {
 		arg := cmds[1]
 		response := fmt.Sprintf("$%d\r\n%s\r\n", len(arg), arg)
@@ -119,7 +124,7 @@ func handleEcho(cmds commands, conn net.Conn) {
 	}
 }
 
-func handleSet(cmds commands, data *sync.Map, conn net.Conn) {
+func handleSet(cmds parameters, data *sync.Map, conn net.Conn) {
 	fmt.Println(len(cmds))
 	if len(cmds) == 3 {
 		key, value := cmds[1], cmds[2]
@@ -151,7 +156,7 @@ func handleSet(cmds commands, data *sync.Map, conn net.Conn) {
 	}
 }
 
-func handleGet(cmds commands, data *sync.Map, conn net.Conn) {
+func handleGet(cmds parameters, data *sync.Map, conn net.Conn) {
 	if len(cmds) == 2 {
 		if val, ok := data.Load(cmds[1]); ok {
 			response := fmt.Sprintf("+%s\r\n", val)
@@ -163,7 +168,7 @@ func handleGet(cmds commands, data *sync.Map, conn net.Conn) {
 	}
 }
 
-func handleRPush(cmds commands, data *sync.Map, conn net.Conn) {
+func handleRPush(cmds parameters, data *sync.Map, conn net.Conn) {
 	key := cmds[1]
 	list, ok := data.Load(key)
 	if !ok {
@@ -177,4 +182,36 @@ func handleRPush(cmds commands, data *sync.Map, conn net.Conn) {
 	conn.Write([]byte(res))
 }
 
+func handleLRange(cmds parameters, data *sync.Map, conn net.Conn) {
+	key, start, end := cmds[1], cmds[2], cmds[3]
+	startIdx, err := strconv.Atoi(start)
+	endIdx, err := strconv.Atoi(end)
+	if err != nil {
+		conn.Write([]byte("+ERROR\r\n"))
+		return
+	}
+	list, _ := data.Load(key)
+	arr := arrayBuilder(list.([]string), startIdx, endIdx)
+	conn.Write(arr)
+}
 
+func arrayBuilder(list []string, start, end int) []byte {
+
+	str := strings.Builder{}
+
+	if len(list) == 0 {
+		str.WriteString("*0\r\n")
+		return []byte(str.String())
+	}
+	if end > len(list) {
+		end = len(list)
+	}
+	str.WriteString(fmt.Sprintf("*%d\r\n", end-start))
+
+	for i := start; i < end; i++ {
+		s := fmt.Sprintf("$%d\r\n%s\r\n", len(list[i]), list[i])
+		str.WriteString(s)
+	}
+	fmt.Println(str.String())
+	return []byte(str.String())
+}
