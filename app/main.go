@@ -208,11 +208,11 @@ func arrayBuilder(list []string, start, end int) []byte {
 		return []byte(str.String())
 	}
 	if end > len(list) {
-		end = len(list)
+		end = len(list) - 1
 	}
 	str.WriteString(fmt.Sprintf("*%d\r\n", end-start))
 
-	for i := start; i < end; i++ {
+	for i := start; i <= end; i++ {
 		s := fmt.Sprintf("$%d\r\n%s\r\n", len(list[i]), list[i])
 		str.WriteString(s)
 	}
