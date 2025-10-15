@@ -89,7 +89,11 @@ func handleConn(conn net.Conn) {
 				case llen:
 					handleLLen(cmds, data, conn)
 				case lpop:
-					handleLPop(cmds, data, conn)
+					if len(cmds) == 2 {
+						handleLPop(cmds, data, conn)
+					} else {
+						handleLPopMulitpleEle(cmds, data, conn)
+					}
 				default:
 					conn.Write([]byte("+ERROR\r\n"))
 					continue
@@ -285,15 +289,46 @@ func handleLPop(cmds parameters, data *sync.Map, conn net.Conn) {
 	}
 
 	switch v := list.(type) {
-		case []string:
-			if len(v) == 0 {
-				conn.Write([]byte("$-1\r\n"))
-				return
-			}
-			ele := v[0]	
-			data.Store(key, v[1:])
-			res := fmt.Sprintf("$%d\r\n%s\r\n", len(ele), ele)
-			conn.Write([]byte(res))
+	case []string:
+		if len(v) == 0 {
+			conn.Write([]byte("$-1\r\n"))
+			return
+		}
+		ele := v[0]
+		data.Store(key, v[1:])
+		res := fmt.Sprintf("$%d\r\n%s\r\n", len(ele), ele)
+		conn.Write([]byte(res))
 	}
 
+}
+
+func handleLPopMulitpleEle(cmds parameters, data *sync.Map, conn net.Conn) {
+	key := cmds[1]
+	list, ok := data.Load(key)
+	if !ok {
+		conn.Write([]byte("$-1\r\n"))
+		return
+	}
+	number, err := strconv.Atoi(cmds[2])
+	if err != nil {
+		conn.Write([]byte("+ERROR\r\n"))
+		return
+	}
+
+	switch v := list.(type) {
+	case []string:
+		if number > len(v) {
+			number = len(v) - 1
+		}
+		res := strings.Builder{}
+		res.WriteString(fmt.Sprintf("*%d\r\n", number))
+		for i := 0; i < number; i++ {
+			ele := v[0]
+			v = v[1:]
+			res.WriteString(fmt.Sprintf("$%d\r\n%s\r\n", len(ele), ele))
+		}
+		data.Store(key, v)
+		conn.Write([]byte(res.String()))
+		return
+	}
 }
