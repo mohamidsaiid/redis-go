@@ -21,6 +21,7 @@ const (
 	lpush  = "lpush"
 	rpop   = "rpop"
 	llen   = "llen"
+	lpop   = "lpop"
 	lrange = "lrange"
 	sep    = "\r\n"
 )
@@ -87,6 +88,8 @@ func handleConn(conn net.Conn) {
 					handleLPush(cmds, data, conn)
 				case llen:
 					handleLLen(cmds, data, conn)
+				case lpop:
+					handleLPop(cmds, data, conn)
 				default:
 					conn.Write([]byte("+ERROR\r\n"))
 					continue
@@ -271,4 +274,26 @@ func handleLLen(cmds parameters, data *sync.Map, conn net.Conn) {
 	}
 	res := fmt.Sprintf(":%d\r\n", len(list.([]string)))
 	conn.Write([]byte(res))
+}
+
+func handleLPop(cmds parameters, data *sync.Map, conn net.Conn) {
+	key := cmds[1]
+	list, ok := data.Load(key)
+	if !ok {
+		conn.Write([]byte("$-1\r\n"))
+		return
+	}
+
+	switch v := list.(type) {
+		case []string:
+			if len(v) == 0 {
+				conn.Write([]byte("$-1\r\n"))
+				return
+			}
+			ele := v[0]	
+			data.Store(key, v[1:])
+			res := fmt.Sprintf("$%d\r\n%s\r\n", len(ele), ele)
+			conn.Write([]byte(res))
+	}
+
 }
