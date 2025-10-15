@@ -20,6 +20,7 @@ const (
 	rpush  = "rpush"
 	lpush  = "lpush"
 	rpop   = "rpop"
+	llen   = "llen"
 	lrange = "lrange"
 	sep    = "\r\n"
 )
@@ -84,6 +85,8 @@ func handleConn(conn net.Conn) {
 					handleLRange(cmds, data, conn)
 				case lpush:
 					handleLPush(cmds, data, conn)
+				case llen:
+					handleLLen(cmds, data, conn)
 				default:
 					conn.Write([]byte("+ERROR\r\n"))
 					continue
@@ -256,5 +259,16 @@ func handleLPush(cmds parameters, data *sync.Map, conn net.Conn) {
 	data.Store(key, newList)
 
 	res := fmt.Sprint(":", len(newList), "\r\n")
+	conn.Write([]byte(res))
+}
+
+func handleLLen(cmds parameters, data *sync.Map, conn net.Conn) {
+	key := cmds[1]
+	list, ok := data.Load(key)
+	if !ok {
+		conn.Write([]byte(":0\r\n"))
+		return
+	}
+	res := fmt.Sprintf(":%d\r\n", len(list.([]string)))
 	conn.Write([]byte(res))
 }
