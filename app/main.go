@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ const (
 	get    = "get"
 	set    = "set"
 	rpush  = "rpush"
+	lpush  = "lpush"
 	rpop   = "rpop"
 	lrange = "lrange"
 	sep    = "\r\n"
@@ -80,6 +82,8 @@ func handleConn(conn net.Conn) {
 					handleRPush(cmds, data, conn)
 				case lrange:
 					handleLRange(cmds, data, conn)
+				case lpush:
+					handleLPush(cmds, data, conn)
 				default:
 					conn.Write([]byte("+ERROR\r\n"))
 					continue
@@ -233,4 +237,24 @@ func LRangeBuilder(list []string, start, end int) []byte {
 
 	fmt.Println(str.String())
 	return []byte(str.String())
+}
+
+func handleLPush(cmds parameters, data *sync.Map, conn net.Conn) {
+	key := cmds[1]
+	list, ok := data.Load(key)
+	if !ok {
+		list = make([]string, 0, 10)
+	}
+	newList := make([]string, 0, 10)
+
+	for i := 2; i < len(cmds); i++ {
+		newList = append(newList, cmds[i])
+	}
+
+	slices.Reverse(newList)
+	newList = append(newList, list.([]string)...)
+	data.Store(key, newList)
+
+	res := fmt.Sprint(":", len(newList), "\r\n")
+	conn.Write([]byte(res))
 }
