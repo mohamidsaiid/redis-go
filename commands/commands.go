@@ -47,22 +47,22 @@ func (cl *Client) HandleCommand(buffer []byte) {
 		cl.handleSet()
 	case get:
 		cl.handleGet()
-	// case rpush:
-	// 	cl.handleRPush(cmds, data, conn)
-	// case lrange:
-	// 	cl.handleLRange(cmds, data, conn)
-	// // case lpush:
-	// 	cl.handleLPush(cmds, data, conn)
-	// case llen:
-	// 	cl.handleLLen(cmds, data, conn)
-	// case lpop:
-	// 	if len(cmds) == 2 {
-	// 		cl.handleLPop(cmds, data, conn)
-	// 	} else {
-	// 		cl.handleLPopMulitpleEle(cmds, data, conn)
-	// 	}
-	// case blpop:
-	// 	cl.handleblpop(cmds, data, conn)
+	case rpush:
+		cl.handleRPush()
+	case lrange:
+		cl.handleLRange()
+	case lpush:
+		cl.handleLPush()
+	case llen:
+		cl.handleLLen()
+	case lpop:
+		if len(cl.cmd.Parameters) == 1 {
+			cl.handleLPop()
+		} else {
+			cl.handleLPopMulitpleEle()
+		}
+	case blpop:
+		cl.handleblpop()
 	default:
 		_, err := cl.conn.Write([]byte("-ERROR command\r\n"))
 		if err != nil {

@@ -146,3 +146,71 @@ func lRangeBuilder(list []string, start, end int) []byte {
 	fmt.Println(str.String())
 	return []byte(str.String())
 }
+
+func (cl *Client) handleLLen() {
+	key := cl.cmd.Parameters[0]
+	list, ok := cl.data.Load(key)
+	if !ok {
+		cl.conn.Write([]byte(":0\r\n"))
+		return
+	}
+	res := fmt.Sprintf(":%d\r\n", len(list.([]string)))
+	cl.conn.Write([]byte(res))
+}
+
+func (cl *Client) handleLPop() {
+	key := cl.cmd.Parameters[0]
+	list, ok := cl.data.Load(key)
+	if !ok {
+		cl.conn.Write([]byte("$-1\r\n"))
+		return
+	}
+
+	switch v := list.(type) {
+	case []string:
+		if len(v) == 0 {
+			cl.conn.Write([]byte("$-1\r\n"))
+			return
+		}
+		ele := v[0]
+		cl.data.Store(key, v[1:])
+		res := fmt.Sprintf("$%d\r\n%s\r\n", len(ele), ele)
+		cl.conn.Write([]byte(res))
+	}
+
+}
+
+func (cl *Client) handleLPopMulitpleEle() {
+	key := cl.cmd.Parameters[0]
+	list, ok := cl.data.Load(key)
+	if !ok {
+		cl.conn.Write([]byte("$-1\r\n"))
+		return
+	}
+	number, err := strconv.Atoi(cl.cmd.Parameters[1])
+	if err != nil {
+		cl.conn.Write([]byte("+ERROR\r\n"))
+		return
+	}
+
+	switch v := list.(type) {
+	case []string:
+		if number > len(v) {
+			number = len(v) - 1
+		}
+		res := strings.Builder{}
+		res.WriteString(fmt.Sprintf("*%d\r\n", number))
+		for i := 0; i < number; i++ {
+			ele := v[0]
+			v = v[1:]
+			res.WriteString(fmt.Sprintf("$%d\r\n%s\r\n", len(ele), ele))
+		}
+		cl.data.Store(key, v)
+		cl.conn.Write([]byte(res.String()))
+		return
+	}
+}
+
+func (cl *Client) handleblpop() {
+
+}
