@@ -346,7 +346,7 @@ func (cl *Client) handleblpop() {
 					}
 				}
 			case <-time.After(timeout):
-				_, err := cl.conn.Write([]byte("$-1\r\n"))
+				_, err := cl.conn.Write([]byte("*-1\r\n"))
 				if err != nil {
 					log.Println(err)
 					return
