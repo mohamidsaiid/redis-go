@@ -19,6 +19,7 @@ const (
 	llen   = "llen"
 	lpop   = "lpop"
 	blpop  = "blpop"
+	Type   = "type"
 	lrange = "lrange"
 )
 
@@ -63,6 +64,8 @@ func (cl *Client) HandleCommand(buffer []byte) {
 		}
 	case blpop:
 		cl.handleblpop()
+	case Type:
+		cl.handleType()
 	default:
 		_, err := cl.conn.Write([]byte("-ERROR command\r\n"))
 		if err != nil {
