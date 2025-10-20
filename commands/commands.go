@@ -3,8 +3,8 @@ package commands
 import (
 	"fmt"
 	"net"
-	"sync"
 
+	"github.com/codecrafters-io/redis-starter-go/Datastore"
 	"github.com/codecrafters-io/redis-starter-go/parser"
 )
 
@@ -25,13 +25,13 @@ const (
 type Client struct {
 	cmd  parser.Command
 	conn net.Conn
-	data *sync.Map
+	ds   *datastore.Datastore
 }
 
-func NewClient(conn net.Conn) Client {
+func NewClient(conn net.Conn, ds *datastore.Datastore) Client {
 	return Client{
 		conn: conn,
-		data: &sync.Map{},
+		ds:   ds,
 	}
 }
 

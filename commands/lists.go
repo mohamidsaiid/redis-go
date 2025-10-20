@@ -2,9 +2,11 @@ package commands
 
 import (
 	"fmt"
+	"log"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type element struct {
@@ -15,8 +17,16 @@ type element struct {
 var newPushedElement = make(chan element)
 
 func (cl *Client) handleRPush() {
+	if len(cl.cmd.Parameters) < 2 {
+		_, err := cl.conn.Write([]byte("- error you should provide key and elements\r\n"))
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		return
+	}
 	key := cl.cmd.Parameters[0]
-	list, ok := cl.data.Load(key)
+	list, ok := cl.ds.Data.Load(key)
 	if !ok {
 		list = make([]string, 0, 10)
 	}
@@ -26,7 +36,7 @@ func (cl *Client) handleRPush() {
 		for i := 1; i < len(cl.cmd.Parameters); i++ {
 			l = append(l, cl.cmd.Parameters[i])
 		}
-		cl.data.Store(key, l)
+		cl.ds.Data.Store(key, l)
 		go func() {
 			newPushedElement <- element{
 				key:   key,
@@ -36,15 +46,23 @@ func (cl *Client) handleRPush() {
 		res := fmt.Sprint(":", len(l), "\r\n")
 		_, err := cl.conn.Write([]byte(res))
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			return
 		}
 	}
 }
 
 func (cl *Client) handleLPush() {
+	if len(cl.cmd.Parameters) < 2 {
+		_, err := cl.conn.Write([]byte("- error you should provide key and elements\r\n"))
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		return
+	}
 	key := cl.cmd.Parameters[0]
-	list, ok := cl.data.Load(key)
+	list, ok := cl.ds.Data.Load(key)
 	if !ok {
 		list = make([]string, 0, 10)
 	}
@@ -58,7 +76,7 @@ func (cl *Client) handleLPush() {
 
 		slices.Reverse(newList)
 		newList = append(newList, l...)
-		cl.data.Store(key, newList)
+		cl.ds.Data.Store(key, newList)
 
 		go func() {
 			newPushedElement <- element{
@@ -70,16 +88,17 @@ func (cl *Client) handleLPush() {
 		res := fmt.Sprint(":", len(newList), "\r\n")
 		_, err := cl.conn.Write([]byte(res))
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			return
 		}
 	}
 }
+
 func (cl *Client) handleLRange() {
 	if len(cl.cmd.Parameters) < 3 {
-		_, err := cl.conn.Write([]byte("+SERROR\r\n"))
+		_, err := cl.conn.Write([]byte("- SERROR\r\n"))
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			return
 		}
 		return
@@ -88,19 +107,19 @@ func (cl *Client) handleLRange() {
 	startIdx, err := strconv.Atoi(start)
 	endIdx, err := strconv.Atoi(end)
 	if err != nil {
-		_, err := cl.conn.Write([]byte("+NERROR\r\n"))
+		_, err := cl.conn.Write([]byte("- NERROR\r\n"))
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			return
 		}
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
-	list, ok := cl.data.Load(key)
+	list, ok := cl.ds.Data.Load(key)
 	if !ok {
 		_, err := cl.conn.Write([]byte("*0\r\n"))
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 			return
 		}
 		return
@@ -108,7 +127,7 @@ func (cl *Client) handleLRange() {
 	arr := lRangeBuilder(list.([]string), startIdx, endIdx)
 	_, err = cl.conn.Write(arr)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 }
@@ -149,7 +168,7 @@ func lRangeBuilder(list []string, start, end int) []byte {
 
 func (cl *Client) handleLLen() {
 	key := cl.cmd.Parameters[0]
-	list, ok := cl.data.Load(key)
+	list, ok := cl.ds.Data.Load(key)
 	if !ok {
 		cl.conn.Write([]byte(":0\r\n"))
 		return
@@ -160,7 +179,7 @@ func (cl *Client) handleLLen() {
 
 func (cl *Client) handleLPop() {
 	key := cl.cmd.Parameters[0]
-	list, ok := cl.data.Load(key)
+	list, ok := cl.ds.Data.Load(key)
 	if !ok {
 		cl.conn.Write([]byte("$-1\r\n"))
 		return
@@ -173,23 +192,38 @@ func (cl *Client) handleLPop() {
 			return
 		}
 		ele := v[0]
-		cl.data.Store(key, v[1:])
-		res := fmt.Sprintf("$%d\r\n%s\r\n", len(ele), ele)
-		cl.conn.Write([]byte(res))
-	}
+		if len(v) == 1 {
+			cl.ds.Data.Delete(key)
+		} else {
+			v = v[1:]
+			cl.ds.Data.Store(key, v)
 
+		}
+		res := fmt.Sprintf("$%d\r\n%s\r\n", len(ele), ele)
+		_, err := cl.conn.Write([]byte(res))
+		if err != nil {
+			log.Println(err)
+			return
+		}
+	}
 }
 
 func (cl *Client) handleLPopMulitpleEle() {
 	key := cl.cmd.Parameters[0]
-	list, ok := cl.data.Load(key)
+	list, ok := cl.ds.Data.Load(key)
 	if !ok {
-		cl.conn.Write([]byte("$-1\r\n"))
+		_, err := cl.conn.Write([]byte("$-1\r\n"))
+		if err != nil {
+			log.Println(err)
+		}
 		return
 	}
 	number, err := strconv.Atoi(cl.cmd.Parameters[1])
 	if err != nil {
-		cl.conn.Write([]byte("+ERROR\r\n"))
+		_, err := cl.conn.Write([]byte("+ERROR\r\n"))
+		if err != nil {
+			log.Println(err)
+		}
 		return
 	}
 
@@ -205,12 +239,120 @@ func (cl *Client) handleLPopMulitpleEle() {
 			v = v[1:]
 			res.WriteString(fmt.Sprintf("$%d\r\n%s\r\n", len(ele), ele))
 		}
-		cl.data.Store(key, v)
-		cl.conn.Write([]byte(res.String()))
+		if len(v) == 0 {
+			cl.ds.Data.Delete(key)
+		} else {
+			cl.ds.Data.Store(key, v)
+		}
+		_, err := cl.conn.Write([]byte(res.String()))
+		if err != nil {
+			log.Println(err)
+		}
 		return
 	}
 }
 
 func (cl *Client) handleblpop() {
+	if len(cl.cmd.Parameters) < 2 {
+		_, err := cl.conn.Write([]byte("- error you should provide the key and time or 0\r\n"))
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		return
+	}
+	key := cl.cmd.Parameters[0]
+	res := func(k, e string) string {
+		return fmt.Sprintf("*2\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n", len(k), k, len(e), e)
+	}
+	if list, ok := cl.ds.Data.Load(key); ok {
+		fmt.Println("already there")
+		switch l := list.(type) {
+		case []string:
+			if len(l) > 0 {
+				ele := l[0]
+				if len(l) == 1 {
+					cl.ds.Data.Delete(key)
+				} else {
+					l = l[1:]
+					cl.ds.Data.Store(key, l)
 
+				}
+				_, err := cl.conn.Write([]byte(res(key, ele)))
+				if err != nil {
+					log.Println(err)
+					return
+				}
+			}
+		}
+		return
+	}
+
+	for {
+		if cl.cmd.Parameters[1] == "0" {
+			ele := <-newPushedElement
+			if ele.key != key {
+				continue
+			}
+			list, _ := cl.ds.Data.Load(key)
+			switch l := list.(type) {
+			case []string:
+				if len(l) == 1 {
+					cl.ds.Data.Delete(key)
+				} else {
+					l = l[1:]
+					cl.ds.Data.Store(key, l)
+
+				}
+				_, err := cl.conn.Write([]byte(res(key, ele.value)))
+				if err != nil {
+					log.Println(err)
+					return
+				}
+			}
+			break
+		} else {
+			t := cl.cmd.Parameters[1]
+			t += "s"
+			timeout, err := time.ParseDuration(t)
+			if err != nil {
+				_, err := cl.conn.Write([]byte("- error: Invalid time support\r\n"))
+				if err != nil {
+					log.Println(err)
+					return
+				}
+			}
+			fmt.Println(timeout)
+
+			select {
+			case ele := <-newPushedElement:
+				if ele.key != key {
+					continue
+				}
+				list, _ := cl.ds.Data.Load(key)
+				switch l := list.(type) {
+				case []string:
+					if len(l) == 1 {
+						cl.ds.Data.Delete(key)
+					} else {
+						l = l[1:]
+						cl.ds.Data.Store(key, l)
+
+					}
+					_, err := cl.conn.Write([]byte(res(key, ele.value)))
+					if err != nil {
+						log.Println(err)
+						return
+					}
+				}
+			case <-time.After(timeout):
+				_, err := cl.conn.Write([]byte("$-1\r\n"))
+				if err != nil {
+					log.Println(err)
+					return
+				}
+			}
+			return
+		}
+	}
 }

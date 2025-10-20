@@ -8,7 +8,7 @@ import (
 func (cl *Client) handleSet() {
 	if len(cl.cmd.Parameters) == 2 {
 		key, value := cl.cmd.Parameters[0], cl.cmd.Parameters[1]
-		cl.data.Store(key, value)
+		cl.ds.Data.Store(key, value)
 		_, err := cl.conn.Write([]byte("+OK\r\n"))
 		if err != nil {
 			fmt.Println(err)
@@ -17,7 +17,7 @@ func (cl *Client) handleSet() {
 	} else if len(cl.cmd.Parameters) == 4 {
 		key, value, expiry, t := cl.cmd.Parameters[0], cl.cmd.Parameters[1], cl.cmd.Parameters[2], cl.cmd.Parameters[3]
 
-		cl.data.Store(key, value)
+		cl.ds.Data.Store(key, value)
 
 		switch expiry {
 		case "ex":
@@ -37,7 +37,7 @@ func (cl *Client) handleSet() {
 		}
 		go func() {
 			time.Sleep(newTime)
-			cl.data.Delete(key)
+			cl.ds.Data.Delete(key)
 		}()
 		_, err = cl.conn.Write([]byte("+OK\r\n"))
 		if err != nil {
@@ -55,7 +55,7 @@ func (cl *Client) handleSet() {
 
 func (cl *Client) handleGet() {
 	if len(cl.cmd.Parameters) == 1 {
-		if val, ok := cl.data.Load(cl.cmd.Parameters[0]); ok {
+		if val, ok := cl.ds.Data.Load(cl.cmd.Parameters[0]); ok {
 			response := fmt.Sprintf("+%s\r\n", val)
 			_, err := cl.conn.Write([]byte(response))
 			if err != nil {
