@@ -4,6 +4,8 @@ import (
 	"fmt"
 )
 
+// handleEcho replies to the client with the first argument of the command.
+// This is used for testing the connection and for debugging.
 func (cl *Client) handleEcho() {
 	if len(cl.cmd.Parameters) == 1 {
 		arg := cl.cmd.Parameters[0]
@@ -22,6 +24,8 @@ func (cl *Client) handleEcho() {
 	}
 }
 
+// handlePing replies to the client with "PONG".
+// This is used to test if the server is alive.
 func (cl *Client) handlePing() {
 	if len(cl.cmd.Parameters) == 0 {
 		_, err := cl.conn.Write([]byte("+PONG\r\n"))

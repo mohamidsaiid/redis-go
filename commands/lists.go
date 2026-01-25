@@ -9,13 +9,17 @@ import (
 	"time"
 )
 
+// element is used to pass data about a newly pushed element to the `newPushedElement` channel.
+// This is used to unblock clients waiting on a BLPOP command.
 type element struct {
-	key   string
-	value string
+	key   string // The key of the list where the element was pushed.
+	value string // The value of the pushed element.
 }
 
+// newPushedElement is a channel used to signal `BLPOP` handlers that a new element has been pushed to a list.
 var newPushedElement = make(chan element)
 
+// handleRPush appends one or more elements to the end of a list.
 func (cl *Client) handleRPush() {
 	if len(cl.cmd.Parameters) < 2 {
 		_, err := cl.conn.Write([]byte("- error you should provide key and elements\r\n"))
@@ -28,6 +32,7 @@ func (cl *Client) handleRPush() {
 	key := cl.cmd.Parameters[0]
 	list, ok := cl.ds.Data.Load(key)
 	if !ok {
+		// If the list does not exist, create a new one.
 		list = make([]string, 0, 10)
 	}
 
@@ -37,6 +42,7 @@ func (cl *Client) handleRPush() {
 			l = append(l, cl.cmd.Parameters[i])
 		}
 		cl.ds.Data.Store(key, l)
+		// Signal any waiting BLPOP clients that a new element has been pushed.
 		go func() {
 			newPushedElement <- element{
 				key:   key,
@@ -52,6 +58,7 @@ func (cl *Client) handleRPush() {
 	}
 }
 
+// handleLPush prepends one or more elements to the beginning of a list.
 func (cl *Client) handleLPush() {
 	if len(cl.cmd.Parameters) < 2 {
 		_, err := cl.conn.Write([]byte("- error you should provide key and elements\r\n"))
@@ -64,6 +71,7 @@ func (cl *Client) handleLPush() {
 	key := cl.cmd.Parameters[0]
 	list, ok := cl.ds.Data.Load(key)
 	if !ok {
+		// If the list does not exist, create a new one.
 		list = make([]string, 0, 10)
 	}
 	switch l := list.(type) {
@@ -74,10 +82,12 @@ func (cl *Client) handleLPush() {
 			newList = append(newList, cl.cmd.Parameters[i])
 		}
 
+		// Reverse the new elements to maintain the correct order when prepending.
 		slices.Reverse(newList)
 		newList = append(newList, l...)
 		cl.ds.Data.Store(key, newList)
 
+		// Signal any waiting BLPOP clients that a new element has been pushed.
 		go func() {
 			newPushedElement <- element{
 				key:   key,
@@ -94,6 +104,7 @@ func (cl *Client) handleLPush() {
 	}
 }
 
+// handleLRange returns a range of elements from a list.
 func (cl *Client) handleLRange() {
 	if len(cl.cmd.Parameters) < 3 {
 		_, err := cl.conn.Write([]byte("- SERROR\r\n"))
@@ -124,6 +135,7 @@ func (cl *Client) handleLRange() {
 		}
 		return
 	}
+	// Build the response array.
 	arr := lRangeBuilder(list.([]string), startIdx, endIdx)
 	_, err = cl.conn.Write(arr)
 	if err != nil {
@@ -132,6 +144,8 @@ func (cl *Client) handleLRange() {
 	}
 }
 
+// lRangeBuilder is a helper function to build the RESP array for the LRANGE command.
+// It handles positive and negative indices.
 func lRangeBuilder(list []string, start, end int) []byte {
 
 	str := strings.Builder{}
@@ -141,6 +155,7 @@ func lRangeBuilder(list []string, start, end int) []byte {
 		return []byte(str.String())
 	}
 
+	// Adjust negative and out-of-range indices.
 	if end >= len(list) {
 		end = len(list) - 1
 	}
@@ -160,10 +175,10 @@ func lRangeBuilder(list []string, start, end int) []byte {
 		str.WriteString(s)
 	}
 
-
 	return []byte(str.String())
 }
 
+// handleLLen returns the length of a list.
 func (cl *Client) handleLLen() {
 	key := cl.cmd.Parameters[0]
 	list, ok := cl.ds.Data.Load(key)
@@ -175,6 +190,7 @@ func (cl *Client) handleLLen() {
 	cl.conn.Write([]byte(res))
 }
 
+// handleLPop removes and returns the first element of a list.
 func (cl *Client) handleLPop() {
 	key := cl.cmd.Parameters[0]
 	list, ok := cl.ds.Data.Load(key)
@@ -190,6 +206,7 @@ func (cl *Client) handleLPop() {
 			return
 		}
 		ele := v[0]
+		// If the list becomes empty after popping, delete the key.
 		if len(v) == 1 {
 			cl.ds.Data.Delete(key)
 		} else {
@@ -206,6 +223,7 @@ func (cl *Client) handleLPop() {
 	}
 }
 
+// handleLPopMulitpleEle removes and returns multiple elements from the beginning of a list.
 func (cl *Client) handleLPopMulitpleEle() {
 	key := cl.cmd.Parameters[0]
 	list, ok := cl.ds.Data.Load(key)
@@ -237,6 +255,7 @@ func (cl *Client) handleLPopMulitpleEle() {
 			v = v[1:]
 			res.WriteString(fmt.Sprintf("$%d\r\n%s\r\n", len(ele), ele))
 		}
+		// If the list becomes empty after popping, delete the key.
 		if len(v) == 0 {
 			cl.ds.Data.Delete(key)
 		} else {
@@ -250,6 +269,9 @@ func (cl *Client) handleLPopMulitpleEle() {
 	}
 }
 
+// handleblpop is a blocking list pop operation.
+// It blocks the connection if the list is empty and waits for a new element to be pushed.
+// It also supports a timeout.
 func (cl *Client) handleblpop() {
 	if len(cl.cmd.Parameters) < 2 {
 		_, err := cl.conn.Write([]byte("- error you should provide the key and time or 0\r\n"))
@@ -260,11 +282,12 @@ func (cl *Client) handleblpop() {
 		return
 	}
 	key := cl.cmd.Parameters[0]
+	// res is a helper function to format the response.
 	res := func(k, e string) string {
 		return fmt.Sprintf("*2\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n", len(k), k, len(e), e)
 	}
+	// First, check if the list already has elements.
 	if list, ok := cl.ds.Data.Load(key); ok {
-		fmt.Println("already there")
 		switch l := list.(type) {
 		case []string:
 			if len(l) > 0 {
@@ -286,9 +309,13 @@ func (cl *Client) handleblpop() {
 		return
 	}
 
+	// If the list is empty, enter the blocking loop.
 	for {
+		// If the timeout is 0, block indefinitely until an element is pushed.
 		if cl.cmd.Parameters[1] == "0" {
+			// Wait for a new element to be pushed to any list.
 			ele := <-newPushedElement
+			// If the pushed element is not for the key we are waiting for, continue waiting.
 			if ele.key != key {
 				continue
 			}
@@ -310,6 +337,7 @@ func (cl *Client) handleblpop() {
 			}
 			break
 		} else {
+			// If a timeout is specified, use a select statement to wait for either a new element or the timeout.
 			t := cl.cmd.Parameters[1]
 			t += "s"
 			timeout, err := time.ParseDuration(t)
@@ -320,9 +348,9 @@ func (cl *Client) handleblpop() {
 					return
 				}
 			}
-			fmt.Println(timeout)
 
 			select {
+			// A new element was pushed.
 			case ele := <-newPushedElement:
 				if ele.key != key {
 					continue
@@ -343,6 +371,7 @@ func (cl *Client) handleblpop() {
 						return
 					}
 				}
+			// The timeout was reached.
 			case <-time.After(timeout):
 				_, err := cl.conn.Write([]byte("*-1\r\n"))
 				if err != nil {
