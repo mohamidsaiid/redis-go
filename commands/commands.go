@@ -38,7 +38,6 @@ func NewClient(conn net.Conn, ds *datastore.Datastore) Client {
 
 func (cl *Client) HandleCommand(buffer []byte) {
 	cl.cmd = parser.Parse(buffer)
-	fmt.Println(cl.cmd.Command, cl.cmd.Parameters)
 	switch cl.cmd.Command {
 	case ping:
 		cl.handlePing()

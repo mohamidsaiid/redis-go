@@ -160,9 +160,7 @@ func lRangeBuilder(list []string, start, end int) []byte {
 		str.WriteString(s)
 	}
 
-	fmt.Println(start, end)
 
-	fmt.Println(str.String())
 	return []byte(str.String())
 }
 
